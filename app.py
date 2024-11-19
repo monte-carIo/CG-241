@@ -182,7 +182,8 @@ class Viewer:
         self.model_dict = {}
         self.model_dict['Optimizer'] = {
                     'lr 0.0x': [1,4,6,10],
-                    'optimizer': ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW']
+                    'optimizer': ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW'],
+                    'velocity': [1, 2, 10, 1]
                 }
         # self.model_dict['Optimizer'] = {
         #         'optimizer': ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW']}
@@ -195,6 +196,7 @@ class Viewer:
         self.dropdown_items = list(self.model_dict.keys())
         self.selected_item = 0  # Index for dropdown
         self.selected_optim = 1  # Index for optimizer dropdown
+        self.veclocity = 2
         
         while not glfw.window_should_close(self.win):
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
@@ -220,12 +222,15 @@ class Viewer:
                 self.args = {key: (value[1]) for key, value in current_model.items() if len(value) > 1}
                 print(self.args, current_optimizer)
                 self.update = False
-                for drawable in self.drawables:
-                    # breakpoint()
-                    self.points_line, self.gradient = get_trajectory(self.model, optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
-                    max_frames = int(len(self.points_line) * 4 / 5)
-                    if hasattr(drawable, 'update'):
-                        drawable.update(self.points_line)
+                if self.veclocity != self.args['velocity']:
+                    self.veclocity = self.args['velocity']
+                else:
+                    for drawable in self.drawables:
+                        # breakpoint()
+                        self.points_line, self.gradient = get_trajectory(self.model, optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
+                        max_frames = int(len(self.points_line) * 4 / 5)
+                        if hasattr(drawable, 'update'):
+                            drawable.update(self.points_line)
             
             # ---- Main 3D View ----
             GL.glViewport(int(win_size[0] * 0.5), 0, *main_viewport_size)
@@ -281,11 +286,12 @@ class Viewer:
             glfw.swap_buffers(self.win)
             glfw.poll_events()
             frame_count += 1
-            sleep(0.02)
+            if self.veclocity != 0:
+                sleep(0.1/(self.veclocity ** 2))
 
     def render_ui(self):
         # Get the number of parameters for the selected model
-        num_params = 1
+        num_params = 5
         # print(num_params)
         # Calculate window height dynamically (you can adjust these values for better layout)
         base_height = 90  # Base height for the window header
@@ -414,13 +420,13 @@ def main():
 def mainv2():
     glfw.init()
     viewer = Viewer()
-    viewer.radius = 0.4
+    viewer.radius = 0.2
     model = ComplexMLP()
     # save the model
     # torch.save(model, 'model.pth')
     # model = torch.load('model.pth')
     model = model.eval()
-    evaluated_points = get_point(model, 15, 150)
+    evaluated_points = get_point(model, 15, 70)
     viewer.points_line, viewer.gradient = get_trajectory(model)
     viewer.model = model
     plane = Mesh(evaluated_points, 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup()

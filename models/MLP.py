@@ -5,25 +5,42 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-def example_function(x, y):
+def example_function(x, y, num_gaussians=40, seed=42):
     """
-    A complex function with multiple local minima, maxima, and saddle points.
+    A complex function with randomized local minima, maxima, and saddle points.
+
+    Args:
+        x: Torch tensor, input x-coordinate.
+        y: Torch tensor, input y-coordinate.
+        num_gaussians: Number of Gaussian bumps to add.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        Torch tensor representing the function value at (x, y).
     """
+    # Set random seed for reproducibility
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
     # Sinusoidal components for oscillatory behavior
-    sinusoidal = torch.sin(2 * x) * torch.cos(2 * y) + torch.sin(y) * torch.cos(x)
+    # freq_x = torch.tensor(np.random.uniform(1.5, 3.5), dtype=torch.float32)
+    # freq_y = torch.tensor(np.random.uniform(1.5, 3.5), dtype=torch.float32)
+    # sinusoidal = torch.sin(freq_x * x) * torch.cos(freq_y * y) + torch.cos(freq_y * x) * torch.sin(freq_x * y)
 
-    # Gaussian bumps for local extrema
-    gaussian_1 = torch.exp(-((x - 2)**2 + (y - 2)**2) / 2)
-    gaussian_2 = torch.exp(-((x + 2)**2 + (y + 2)**2) / 1.5)
-    gaussian_3 = torch.exp(-((x - 3)**2 + (y + 3)**2) / 1)
-    gaussian_4 = torch.exp(-((x + 3)**2 + (y - 3)**2) / 0.2)
+    # Randomized Gaussian bumps
+    gaussians = torch.zeros_like(x)
+    for _ in range(num_gaussians):
+        # Randomly place the Gaussian bump in the domain
+        center_x = torch.tensor(np.random.uniform(-7.5, 7.5), dtype=torch.float32)
+        center_y = torch.tensor(np.random.uniform(-7.5, 7.5), dtype=torch.float32)
+        amplitude = torch.tensor(np.random.uniform(-2, 2), dtype=torch.float32)  # Positive or negative bump
+        width = torch.tensor(np.random.uniform(0.5, 2.0), dtype=torch.float32)
 
-    # Polynomial component for global trends and saddle points
-    polynomial = (x**3 - x * y**2)
+        # Add the Gaussian bump
+        gaussians += amplitude * torch.exp(-((x - center_x)**2 + (y - center_y)**2) / (2 * width**2))
 
-    # Combining all components with weights
-    # result =  (gaussian_1 + gaussian_2 - gaussian_3 - gaussian_4) + polynomial
-    result = sinusoidal + (gaussian_1 + gaussian_2 - gaussian_3 - gaussian_4)
+    # Combine sinusoidal and Gaussian components
+    result = gaussians #+ 0.5 * sinusoidal
 
     return result
 
@@ -73,8 +90,10 @@ def get_point(model, size, num_edge):
 
 def get_trajectory(model, size=15, optimizer='Adam', lr=0.04):
     model = example_function
-    x = torch.tensor([[-4]], dtype=torch.float32, requires_grad=True)
-    y = torch.tensor([[-5]], dtype=torch.float32, requires_grad=True)
+    # x = torch.tensor([[-4]], dtype=torch.float32, requires_grad=True)
+    # y = torch.tensor([[-5]], dtype=torch.float32, requires_grad=True)
+    x = torch.tensor([[np.random.uniform(-size/2, size/2)]], dtype=torch.float32, requires_grad=True)
+    y = torch.tensor([[np.random.uniform(-size/2, size/2)]], dtype=torch.float32, requires_grad=True)
     # Define the optimizer for x and y
     if optimizer == 'SGD':
         optimizer = optim.SGD([x, y], lr=lr)
