@@ -4,8 +4,9 @@ import torch.optim as optim
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from libs.transform import *
 
-def example_function(x, y, num_gaussians=40, seed=42):
+def example_function(x, y, num_gaussians=50, seed=42):
     """
     A complex function with randomized local minima, maxima, and saddle points.
 
@@ -33,7 +34,7 @@ def example_function(x, y, num_gaussians=40, seed=42):
         # Randomly place the Gaussian bump in the domain
         center_x = torch.tensor(np.random.uniform(-7.5, 7.5), dtype=torch.float32)
         center_y = torch.tensor(np.random.uniform(-7.5, 7.5), dtype=torch.float32)
-        amplitude = torch.tensor(np.random.uniform(-2, 2), dtype=torch.float32)  # Positive or negative bump
+        amplitude = torch.tensor(np.random.uniform(-3.5, 3.5), dtype=torch.float32)  # Positive or negative bump
         width = torch.tensor(np.random.uniform(0.5, 2.0), dtype=torch.float32)
 
         # Add the Gaussian bump
@@ -67,7 +68,7 @@ class ComplexMLP(nn.Module):
         return x*50
     
 
-def get_point(model, size, num_edge):
+def get_point(size, num_edge):
     model = example_function
     x_values = np.linspace(-size/2, size/2, num_edge)
     y_values = np.linspace(-size/2, size/2, num_edge)
@@ -88,12 +89,8 @@ def get_point(model, size, num_edge):
     # y = torch.tensor([[np.random.randn()]], dtype=torch.float32, requires_grad=True)
     return np.stack((X, Y, Z), axis=-1).reshape(-1, 3)
 
-def get_trajectory(model, size=15, optimizer='Adam', lr=0.04):
+def get_trajectory(x, y, size=15, optimizer='Adam', lr=0.04):
     model = example_function
-    # x = torch.tensor([[-4]], dtype=torch.float32, requires_grad=True)
-    # y = torch.tensor([[-5]], dtype=torch.float32, requires_grad=True)
-    x = torch.tensor([[np.random.uniform(-size/2, size/2)]], dtype=torch.float32, requires_grad=True)
-    y = torch.tensor([[np.random.uniform(-size/2, size/2)]], dtype=torch.float32, requires_grad=True)
     # Define the optimizer for x and y
     if optimizer == 'SGD':
         optimizer = optim.SGD([x, y], lr=lr)
@@ -114,7 +111,6 @@ def get_trajectory(model, size=15, optimizer='Adam', lr=0.04):
 
     step = 0
     # Optimization loop
-    # breakpoint()
     while True:
         # Zero gradients for x and y
         optimizer.zero_grad()
@@ -139,7 +135,7 @@ def get_trajectory(model, size=15, optimizer='Adam', lr=0.04):
         # Update x and y using the optimizer
         optimizer.step()
 
-        if (len(trajectory_z) > 1 and(abs(z.item() - trajectory_z[-1]) <1e-6)) or (step > 3000):
+        if (len(trajectory_z) > 1 and(abs(z.item() - trajectory_z[-1]) < 1e-6)) or (step > 3000):
             break
         if x.item() < -size/2 or x.item() > size/2 or y.item() < -size/2 or y.item() > size/2:
             break
@@ -149,7 +145,7 @@ def get_trajectory(model, size=15, optimizer='Adam', lr=0.04):
         trajectory_y.append(y_pre.item())
         trajectory_z.append(z.item())
         step += 1
-    # (nnumpoints, 3), (num_edge * num_edge, 3)
+    # (nnumpoints, 3), (num_edge * num_edge, 2)
     return (np.stack((trajectory_x,trajectory_y,trajectory_z), axis=-1),
             np.stack((gradient_x, gradient_y), axis=-1))
 

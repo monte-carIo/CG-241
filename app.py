@@ -165,7 +165,6 @@ class Viewer:
         GL.glDepthFunc(GL.GL_LESS)
 
         # Initialize drawables and parameters
-        self.model = None
         self.rotating = False
         self.debug = False
         self.drawables = []
@@ -192,7 +191,7 @@ class Viewer:
     def run(self):
         """Main render loop for the OpenGL window with 2D contour overlay."""
         frame_count = 0
-        max_frames = int(len(self.points_line) * 4 / 5)
+        max_frames = int(max([len(points) for points in self.points_line]))
         self.dropdown_items = list(self.model_dict.keys())
         self.selected_item = 0  # Index for dropdown
         self.selected_optim = 1  # Index for optimizer dropdown
@@ -227,7 +226,7 @@ class Viewer:
                 else:
                     for drawable in self.drawables:
                         # breakpoint()
-                        self.points_line, self.gradient = get_trajectory(self.model, optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
+                        self.points_line, self.gradient = get_trajectory(optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
                         max_frames = int(len(self.points_line) * 4 / 5)
                         if hasattr(drawable, 'update'):
                             drawable.update(self.points_line)
@@ -257,15 +256,29 @@ class Viewer:
             # Calculate transformation matrices
             frame_count %= max_frames
             # breakpoint()
-            normal_vec = normalized(vec(-self.gradient[frame_count][0], -self.gradient[frame_count][1], 1))
-            trans_matrix = translate(vec(self.points_line[frame_count]) + self.radius * normal_vec)
-            self.rot_matrix = self.calculate_rotation_matrix(frame_count, normal_vec)
-            model = trans_matrix @ self.rot_matrix
+            models = []
+            for i in range(len(self.points_line)):
+                if frame_count < len(self.points_line[i]):
+                    normal_vec = normalized(vec(-self.gradient[i][frame_count][0], -self.gradient[i][frame_count][1], 1))
+                    trans_matrix = translate(vec(self.points_line[i][frame_count]) + self.radius * normal_vec)
+                    # self.rot_matrix = self.calculate_rotation_matrix(frame_count, normal_vec)
+                    model = trans_matrix #@ self.rot_matrix
+                else:
+                    normal_vec = normalized(vec(-self.gradient[i][-1][0], -self.gradient[i][-1][1], 1))
+                    trans_matrix = translate(vec(self.points_line[i][-1]) + self.radius * normal_vec)
+                    # self.rot_matrix = self.calculate_rotation_matrix(frame_count, normal_vec)
+                    model = trans_matrix #@ self.rot_matrix
+                models.append(model)
             
             # Draw all 3D objects
+            index = 0
             for drawable in self.drawables:
                 if drawable.__class__.__name__ != 'Contour':
-                    drawable.draw(projection, view, model)
+                    if drawable.__class__.__name__ == 'Sphere':
+                        drawable.draw(projection, view, models[index])
+                        index += 1
+                    else:
+                        drawable.draw(projection, view, None)
                 
             # ---- Fixed Top View ----
             GL.glViewport(0, 0, *top_viewport_size)   # Set bottom-left viewport
@@ -277,9 +290,14 @@ class Viewer:
                                 [0, 0, 0, 1]], dtype=np.float32)
             top_projection = self.trackball.projection_matrix(top_viewport_size)
 
+            index = 0
             for drawable in self.drawables:
                 if drawable.__class__.__name__ != 'Mesh':
-                    drawable.draw(top_projection, top_view, model)
+                    if drawable.__class__.__name__ == 'Sphere':
+                        drawable.draw(top_projection, top_view, models[index])
+                        index += 1
+                    else:
+                        drawable.draw(top_projection, top_view, None)
             
             imgui.render()
             self.impl.render(imgui.get_draw_data())
@@ -361,7 +379,7 @@ class Viewer:
             angle = 360 * distance / (self.radius * 2 * np.pi)
             return rotate(rot_axis, angle) @ self.rot_matrix
 
-    def add(self, *drawables):
+    def add(self, drawables):
         """Add drawable objects to the scene"""
         self.drawables.extend(drawables)
 
@@ -396,49 +414,43 @@ class Viewer:
         """Handle scroll events for zooming"""
         self.trackball.zoom(deltay, glfw.get_window_size(win)[1])
 
-
 def main():
     glfw.init()
     viewer = Viewer()
-    viewer.radius = 0.4
-    expression_str = input("Enter a mathematical expression for z in terms of x and y (e.g., 'sin(x) + cos(y)'): ")
-    breakpoint()
-    mesh_points = generate_points(15, 70)
-    evaluated_points, mean_z = evaluate_points(mesh_points, expression_str)
-
-    plane = Mesh(evaluated_points, mean_z, 'resources/shaders/gouraud.vert', 'resources/shaders/gouraud.frag').setup()
-    viewer.points_line, viewer.gradient = gradient_descent(0.01, expression_str)
-    line = Linear(viewer.points_line, 'resources/shaders/phong.vert', 'resources/shaders/phong.frag').setup()
-    sphere = Sphere(viewer.radius, 'resources/shaders/phong_texture.vert', 'resources/shaders/phong_texture.frag').setup()
-
-    viewer.add(plane, line, sphere)
-
-
-    viewer.run()
-    glfw.terminate()
-    
-def mainv2():
-    glfw.init()
-    viewer = Viewer()
     viewer.radius = 0.2
-    model = ComplexMLP()
-    # save the model
-    # torch.save(model, 'model.pth')
-    # model = torch.load('model.pth')
-    model = model.eval()
-    evaluated_points = get_point(model, 15, 70)
-    viewer.points_line, viewer.gradient = get_trajectory(model)
-    viewer.model = model
-    plane = Mesh(evaluated_points, 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup()
-    line = Linear(viewer.points_line, 'resources/shaders/phong.vert', 'resources/shaders/phong.frag').setup()
-    sphere = Sphere(viewer.radius, 'resources/shaders/phong_texture.vert', 'resources/shaders/phong_texture.frag').setup()
-    # breakpoint()
-    contour = Contour(evaluated_points, 'resources/shaders/contour.vert', 'resources/shaders/contour.frag').setup()
+    size = 15
+    num_points = 10
+    evaluated_points = get_point(15, 50)
+    for i in range(num_points):
+        # Generate random values
+        np.random.seed(None)
+        x_value = np.random.uniform(-size / 2, size / 2)
+        y_value = np.random.uniform(-size / 2, size / 2)
 
-    viewer.add(plane, line, sphere, contour)
+        # Convert to tensors with requires_grad=True
+        x = torch.tensor([[x_value]], dtype=torch.float32, requires_grad=True)
+        y = torch.tensor([[y_value]], dtype=torch.float32, requires_grad=True)
+
+        # Print x and y
+        print(f"Iteration {i}: x = {x.item()}, y = {y.item()}")
+
+        # Compute trajectory and gradients
+        pointlines, gradient = get_trajectory(x, y, optimizer='Adam', lr=0.04)
+        viewer.points_line.append(pointlines)
+        viewer.gradient.append(gradient)
+    
+    plane = Mesh(evaluated_points, 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup()
+    contour = Contour(evaluated_points, 'resources/shaders/contour.vert', 'resources/shaders/contour.frag').setup()
+    drawables = []
+    for i in range(num_points):
+        drawables.append(Linear(viewer.points_line[i], 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup())
+        drawables.append(Sphere(viewer.radius,'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup())
+    drawables.append(plane)
+    drawables.append(contour)
+    viewer.add(drawables)
 
     viewer.run()
     glfw.terminate()
 
 if __name__ == '__main__':
-    mainv2()
+    main()
