@@ -23,11 +23,6 @@ def example_function(x, y, num_gaussians=50, seed=42):
     torch.manual_seed(seed)
     np.random.seed(seed)
 
-    # Sinusoidal components for oscillatory behavior
-    # freq_x = torch.tensor(np.random.uniform(1.5, 3.5), dtype=torch.float32)
-    # freq_y = torch.tensor(np.random.uniform(1.5, 3.5), dtype=torch.float32)
-    # sinusoidal = torch.sin(freq_x * x) * torch.cos(freq_y * y) + torch.cos(freq_y * x) * torch.sin(freq_x * y)
-
     # Randomized Gaussian bumps
     gaussians = torch.zeros_like(x)
     for _ in range(num_gaussians):

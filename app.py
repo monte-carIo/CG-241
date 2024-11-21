@@ -180,18 +180,17 @@ class Viewer:
         self.selected_item = None
         self.model_dict = {}
         self.model_dict['Optimizer'] = {
-                    'lr 0.0x': [1,4,6,10],
+                    'lr 0.0x': [1,2,5,10],
                     'optimizer': ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW'],
                     'velocity': [1, 2, 10, 1]
                 }
-        # self.model_dict['Optimizer'] = {
-        #         'optimizer': ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW']}
         self.optims = ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW']
+        self.color = {'SGD': [1, 0, 0], 'Adam': [0, 1, 0], 'RMSprop': [0, 0, 1], 'Adagrad': [1, 1, 0], 'AdamW': [1, 0, 1]}
         
     def run(self):
         """Main render loop for the OpenGL window with 2D contour overlay."""
         frame_count = 0
-        max_frames = int(max([len(points) for points in self.points_line]))
+        max_frames = int(max([len(points) for points in self.points_line])*4/5)
         self.dropdown_items = list(self.model_dict.keys())
         self.selected_item = 0  # Index for dropdown
         self.selected_optim = 1  # Index for optimizer dropdown
@@ -224,12 +223,16 @@ class Viewer:
                 if self.veclocity != self.args['velocity']:
                     self.veclocity = self.args['velocity']
                 else:
+                    self.points_line = [np.load(f'cache/points_line_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
+                    self.gradient = [np.load(f'cache/gradient_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
+                    max_frames = int(max([len(points) for points in self.points_line])*4/5)
+                    index = 0
                     for drawable in self.drawables:
                         # breakpoint()
-                        self.points_line, self.gradient = get_trajectory(optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
-                        max_frames = int(len(self.points_line) * 4 / 5)
+                        # self.points_line, self.gradient = get_trajectory(optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
                         if hasattr(drawable, 'update'):
-                            drawable.update(self.points_line)
+                            drawable.update(self.points_line[index], self.color[current_optimizer])
+                            index += 1
             
             # ---- Main 3D View ----
             GL.glViewport(int(win_size[0] * 0.5), 0, *main_viewport_size)
@@ -262,12 +265,14 @@ class Viewer:
                     normal_vec = normalized(vec(-self.gradient[i][frame_count][0], -self.gradient[i][frame_count][1], 1))
                     trans_matrix = translate(vec(self.points_line[i][frame_count]) + self.radius * normal_vec)
                     # self.rot_matrix = self.calculate_rotation_matrix(frame_count, normal_vec)
-                    model = trans_matrix #@ self.rot_matrix
                 else:
                     normal_vec = normalized(vec(-self.gradient[i][-1][0], -self.gradient[i][-1][1], 1))
-                    trans_matrix = translate(vec(self.points_line[i][-1]) + self.radius * normal_vec)
+                    if len(self.points_line[i]) > 0: 
+                        trans_matrix = translate(vec(self.points_line[i][-1]) + self.radius * normal_vec)
+                    else:
+                        trans_matrix = translate(vec([0, 0, 0]) + self.radius * normal_vec)
                     # self.rot_matrix = self.calculate_rotation_matrix(frame_count, normal_vec)
-                    model = trans_matrix #@ self.rot_matrix
+                model = trans_matrix #@ self.rot_matrix
                 models.append(model)
             
             # Draw all 3D objects
@@ -305,7 +310,7 @@ class Viewer:
             glfw.poll_events()
             frame_count += 1
             if self.veclocity != 0:
-                sleep(0.1/(self.veclocity ** 2))
+                sleep(0.1/(self.veclocity))
 
     def render_ui(self):
         # Get the number of parameters for the selected model
@@ -417,34 +422,51 @@ class Viewer:
 def main():
     glfw.init()
     viewer = Viewer()
-    viewer.radius = 0.2
+    viewer.radius = 0.15
     size = 15
-    num_points = 10
-    evaluated_points = get_point(15, 50)
+    num_points = 15
+    if not os.path.exists('cache/evaluated_points.npy'):
+        evaluated_points = get_point(15, 100)
+        np.save('cache/evaluated_points.npy', evaluated_points)
+    else:
+        evaluated_points = np.load('cache/evaluated_points.npy')
+    x_value = []
+    y_value = []
     for i in range(num_points):
-        # Generate random values
         np.random.seed(None)
-        x_value = np.random.uniform(-size / 2, size / 2)
-        y_value = np.random.uniform(-size / 2, size / 2)
+        x_value.append(np.random.uniform(-size / 2, size / 2))
+        y_value.append(np.random.uniform(-size / 2, size / 2))
+    if not os.path.exists('cache/points_line_1_Adam_1.npy'):
+        for optimizer in viewer.model_dict['Optimizer']['optimizer']:
+            for lr in range(viewer.model_dict['Optimizer']['lr 0.0x'][0], viewer.model_dict['Optimizer']['lr 0.0x'][2] + 1):
+                for i in range(num_points):
+                    # Convert to tensors with requires_grad=True
+                    x = torch.tensor([[x_value[i]]], dtype=torch.float32, requires_grad=True)
+                    y = torch.tensor([[y_value[i]]], dtype=torch.float32, requires_grad=True)
 
-        # Convert to tensors with requires_grad=True
-        x = torch.tensor([[x_value]], dtype=torch.float32, requires_grad=True)
-        y = torch.tensor([[y_value]], dtype=torch.float32, requires_grad=True)
+                    # Print x and y
+                    print(f"Iteration {i}: x = {x.item()}, y = {y.item()}, optimizer = {optimizer}, lr = {0.01 * lr}")
 
-        # Print x and y
-        print(f"Iteration {i}: x = {x.item()}, y = {y.item()}")
-
-        # Compute trajectory and gradients
-        pointlines, gradient = get_trajectory(x, y, optimizer='Adam', lr=0.04)
-        viewer.points_line.append(pointlines)
-        viewer.gradient.append(gradient)
+                    # Compute trajectory and gradients
+                    pointlines, gradient = get_trajectory(x, y, optimizer=optimizer, lr=0.01 * lr)
+                    viewer.points_line.append(pointlines)
+                    viewer.gradient.append(gradient)
+                for i in range(num_points):
+                    np.save(f'cache/points_line_{i}_{optimizer}_{lr}.npy', viewer.points_line[i])
+                    np.save(f'cache/gradient_{i}_{optimizer}_{lr}.npy', viewer.gradient[i])
+                viewer.points_line = []
+                viewer.gradient = []
+    else:
+        for i in range(num_points):
+            viewer.points_line.append(np.load(f'cache/points_line_{i}_Adam_2.npy'))
+            viewer.gradient.append(np.load(f'cache/gradient_{i}_Adam_2.npy'))
     
     plane = Mesh(evaluated_points, 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup()
     contour = Contour(evaluated_points, 'resources/shaders/contour.vert', 'resources/shaders/contour.frag').setup()
     drawables = []
     for i in range(num_points):
-        drawables.append(Linear(viewer.points_line[i], 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup())
-        drawables.append(Sphere(viewer.radius,'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup())
+        drawables.append(Linear(viewer.points_line[i], 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag', viewer.color['Adam']).setup())
+        drawables.append(Sphere(viewer.radius,'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag', viewer.color['Adam']).setup())
     drawables.append(plane)
     drawables.append(contour)
     viewer.add(drawables)

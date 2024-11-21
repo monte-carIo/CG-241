@@ -35,12 +35,12 @@ def newball(radius, sides):
     return vertices, indices, color, texcoords
 
 class Linear(object):
-    def __init__(self, points, vert_shader, frag_shader):
+    def __init__(self, points, vert_shader, frag_shader, color = [1, 0, 1]):
         self.vertices = points
         self.indices, self.colors = [], []
         for i in range(len(self.vertices)):
             self.indices += [i]
-            self.colors += [[1,0,1]]
+            self.colors += [color]
         
         self.vertices = np.array(self.vertices, dtype=np.float32)
         self.colors = np.array(self.colors, dtype=np.float32)
@@ -115,12 +115,12 @@ class Linear(object):
         if key == glfw.KEY_2:
             self.selected_texture = 2
             
-    def update(self, points):
+    def update(self, points, color = [1, 0, 1]):
         self.vertices = points
         self.indices, self.colors = [], []
         for i in range(len(self.vertices)):
             self.indices += [i]
-            self.colors += [[1,0,1]]
+            self.colors += [color]
         self.vertices = np.array(self.vertices, dtype=np.float32)
         self.colors = np.array(self.colors, dtype=np.float32)
         self.indices = np.array(self.indices, dtype=np.uint32)

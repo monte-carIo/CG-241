@@ -36,7 +36,7 @@ def rotation_matrix(axis, angle):
 
 
 
-def newsphere1(radius, sides):
+def newsphere1(radius, sides, u_color):
     vertices, indices, color, texcoords = [], [], [], []
     for i in range(sides+1):
         for j in range(sides+1):
@@ -64,9 +64,10 @@ def newsphere1(radius, sides):
 
 
 class Sphere(object):
-    def __init__(self, radius, vert_shader, frag_shader):   
+    def __init__(self, radius, vert_shader, frag_shader, color=[1, 1, 1]):   
         self.radius = radius
-        self.vertices, self.indices, self.colors, self.texcoords = newsphere1(self.radius, 30)     
+        self.size = 30
+        self.vertices, self.indices, self.colors, self.texcoords = newsphere1(self.radius, self.size, color)     
 
         self.normals = generate_normals(self.vertices, self.indices)
 
@@ -139,3 +140,9 @@ class Sphere(object):
             self.selected_texture = 1
         if key == glfw.KEY_2:
             self.selected_texture = 2
+    
+    # def update(self, points, color = [1, 1, 1]):
+    #     self.colors = np.tile(color, (self.size+1) * (self.size+1), 1).astype(np.float32)
+    #     del self.vao
+    #     self.vao = VAO()
+    #     self.setup()
