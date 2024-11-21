@@ -19,6 +19,7 @@ from mesh import *
 from linear import *
 from sphere import *
 from contour import *
+from cam_object import *
 
 from SGD import evaluate_points, gradient_descent, generate_points
 from models.MLP import ComplexMLP, get_point, get_trajectory
@@ -110,7 +111,7 @@ def generate_cameras(top_view_matrix):
     ]
     
     corrected_views = []
-    original_position = np.array([3, 0, -30, 1])
+    original_position = np.array([1, 0, -35, 1])
     for view in views:
         # Extract the rotation part of the matrix
         rotation_part = view[:3, :3]
@@ -181,10 +182,10 @@ class Viewer:
         self.model_dict = {}
         self.model_dict['Optimizer'] = {
                     'lr 0.0x': [1,2,5,10],
-                    'optimizer': ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW'],
-                    'velocity': [1, 2, 10, 1]
+                    'optimizer': ['SGD', 'Adam', 'RMSprop', 'AdamW', 'Adagrad', "Random"],
+                    'velocity': [1, 4, 10, 1]
                 }
-        self.optims = ['SGD', 'Adam', 'RMSprop', 'Adagrad', 'AdamW']
+        self.optims = ['SGD', 'Adam', 'RMSprop', 'AdamW', 'Adagrad', 'Random']
         self.color = {'SGD': [1, 0, 0], 'Adam': [0, 1, 0], 'RMSprop': [0, 0, 1], 'Adagrad': [1, 1, 0], 'AdamW': [1, 0, 1]}
         
     def run(self):
@@ -194,7 +195,8 @@ class Viewer:
         self.dropdown_items = list(self.model_dict.keys())
         self.selected_item = 0  # Index for dropdown
         self.selected_optim = 1  # Index for optimizer dropdown
-        self.veclocity = 2
+        self.veclocity = 4
+        tmp_optimizer = [random.choice(self.optims[:-2]) for _ in range(15)]
         
         while not glfw.window_should_close(self.win):
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
@@ -223,16 +225,26 @@ class Viewer:
                 if self.veclocity != self.args['velocity']:
                     self.veclocity = self.args['velocity']
                 else:
-                    self.points_line = [np.load(f'cache/points_line_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
-                    self.gradient = [np.load(f'cache/gradient_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
-                    max_frames = int(max([len(points) for points in self.points_line])*4/5)
-                    index = 0
-                    for drawable in self.drawables:
-                        # breakpoint()
-                        # self.points_line, self.gradient = get_trajectory(optimizer=current_optimizer, lr= 0.01 * self.args['lr 0.0x'])
-                        if hasattr(drawable, 'update'):
-                            drawable.update(self.points_line[index], self.color[current_optimizer])
-                            index += 1
+                    if current_optimizer != 'Random':
+                        self.points_line = [np.load(f'cache/points_line_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
+                        self.gradient = [np.load(f'cache/gradient_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
+                        max_frames = int(max([len(points) for points in self.points_line])*4/5)
+                        index = 0
+                        for drawable in self.drawables:
+                            if hasattr(drawable, 'update'):
+                                drawable.update(self.points_line[index], self.color[current_optimizer])
+                                index += 1
+                        tmp_optimizer = [random.choice(self.optims[:-2]) for _ in range(15)]
+                    else:
+                        print('learning rate in Random: ',self.args["lr 0.0x"])
+                        self.points_line = [np.load(f'cache/points_line_{i}_{optim}_{self.args["lr 0.0x"]}.npy') for i, optim in enumerate(tmp_optimizer)]
+                        self.gradient = [np.load(f'cache/gradient_{i}_{optim}_{self.args["lr 0.0x"]}.npy') for i, optim in enumerate(tmp_optimizer)]
+                        max_frames = int(max([len(points) for points in self.points_line])*4/5)
+                        index = 0
+                        for drawable in self.drawables:
+                            if hasattr(drawable, 'update'):
+                                drawable.update(self.points_line[index], self.color[tmp_optimizer[index]])
+                                index += 1
             
             # ---- Main 3D View ----
             GL.glViewport(int(win_size[0] * 0.5), 0, *main_viewport_size)
@@ -240,7 +252,14 @@ class Viewer:
             if self.cam_index == -1:
                 view = self.trackball.view_matrix()
             if self.generate_cams:
-                self.cams = generate_cameras(view)
+                print('Generating cameras')
+                top_view = np.array([[1, 0, 0, 0],
+                                [0, 1, 0, 0],
+                                [0, 0, 1, -40],
+                                [0, 0, 0, 1]], dtype=np.float32)
+                self.cams = generate_cameras(top_view)
+                for cam in self.cams:
+                    self.drawables.append(CameraObject(cam,'resources/shaders/cam.vert', 'resources/shaders/cam.frag').setup())
                 self.generate_cams = False
             projection = self.trackball.projection_matrix(main_viewport_size)
             if self.cam_index != -1:
@@ -370,6 +389,18 @@ class Viewer:
         
         # End the ImGui window
         imgui.end()
+        # Add a new ImGui window for the optimizer-color legend
+        imgui.begin("Optimizer-Color Legend", closable=False)
+
+        imgui.text("Legend: Optimizers and Colors")
+        imgui.separator()
+        for optimizer, color in self.color.items():
+            # Show color button and optimizer name
+            imgui.color_button(f"##{optimizer}_color", *color, 1.0)  # Removed unsupported flag
+            imgui.same_line()
+            imgui.text(optimizer)
+
+        imgui.end()
 
     def calculate_rotation_matrix(self, frame_count, normal_vec):
         """Calculate rotation matrix based on frame count and normal vector"""
@@ -461,7 +492,7 @@ def main():
             viewer.points_line.append(np.load(f'cache/points_line_{i}_Adam_2.npy'))
             viewer.gradient.append(np.load(f'cache/gradient_{i}_Adam_2.npy'))
     
-    plane = Mesh(evaluated_points, 'resources/shaders/gouraud.vert', 'resources/shaders/phong.frag').setup()
+    plane = Mesh(evaluated_points, 'resources/shaders/gouraud.vert', 'resources/shaders/gouraud.frag').setup()
     contour = Contour(evaluated_points, 'resources/shaders/contour.vert', 'resources/shaders/contour.frag').setup()
     drawables = []
     for i in range(num_points):

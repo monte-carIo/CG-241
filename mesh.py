@@ -11,30 +11,14 @@ from sympy import *
 def newmesh(points):
     vertices, indices, color = points, [], []
     numEdge = sqrt(len(points)) - 1
-    
-    num_levels = 10
     minZ = min(vertex[2] for vertex in vertices)
     maxZ = max(vertex[2] for vertex in vertices)
-    interval = (maxZ - minZ) / num_levels if maxZ > minZ else 1
-    
-    colors = []
-    brightness_factor = 0
-    for i in range(num_levels):
-        # Define a color for each level; here we blend from green to red
-        color = [i / (num_levels - 1), 1 - i / (num_levels - 1), 0]
-        brighter_color = [
-            brightness_factor + (1 - brightness_factor) * color[0],
-            brightness_factor + (1 - brightness_factor) * color[1],
-            brightness_factor + (1 - brightness_factor) * color[2]
-        ]
-        colors.append(brighter_color)
     color = []
     for vertex in vertices:
-        level = int((vertex[2] - minZ) / interval) if maxZ > minZ else 0
-        level = min(level, num_levels - 1)  # Ensure the level does not exceed num_levels - 1
-
-        # Assign the color corresponding to the contour level
-        color.append(colors[level])
+        normalized_z = (vertex[2] - minZ) / (maxZ - minZ) if maxZ > minZ else 0
+        # Interpolate between red and green
+        vertex_color = [normalized_z, 1 - normalized_z, 0]  # [R, G, B]
+        color.append(vertex_color)
     for j in range(numEdge):
         for i in range(numEdge):
             point = (numEdge+1)*j+i
