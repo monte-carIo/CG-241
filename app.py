@@ -182,21 +182,25 @@ class Viewer:
         self.model_dict = {}
         self.model_dict['Optimizer'] = {
                     'lr 0.0x': [1,2,5,10],
-                    'optimizer': ['SGD', 'Adam', 'RMSprop', 'AdamW', 'Adagrad', "Random"],
+                    'optimizer': ['Comparing', 'SGD', 'Adam', 'RMSprop', 'AdamW', 'Adagrad', "Random"],
                     'velocity': [1, 4, 10, 1]
                 }
-        self.optims = ['SGD', 'Adam', 'RMSprop', 'AdamW', 'Adagrad', 'Random']
+        self.optims = ['Comparing', 'SGD', 'Adam', 'RMSprop', 'AdamW', 'Adagrad', 'Random']
         self.color = {'SGD': [1, 0, 0], 'Adam': [0, 1, 0], 'RMSprop': [0, 0, 1], 'Adagrad': [1, 1, 0], 'AdamW': [1, 0, 1]}
         
     def run(self):
         """Main render loop for the OpenGL window with 2D contour overlay."""
         frame_count = 0
-        max_frames = int(max([len(points) for points in self.points_line])*4/5)
+        lengths = sorted([len(points) for points in self.points_line], reverse=True)
+        sixth_max = lengths[5] if len(lengths) >= 6 else None
+        max_frames = int(sixth_max * 4 / 5) if sixth_max else None
         self.dropdown_items = list(self.model_dict.keys())
         self.selected_item = 0  # Index for dropdown
         self.selected_optim = 1  # Index for optimizer dropdown
         self.veclocity = 4
-        tmp_optimizer = [random.choice(self.optims[:-2]) for _ in range(15)]
+        step = 0
+        tmp_optimizer = [random.choice(self.optims[1:-1]) for _ in range(15)]
+        point_index = [2,3,4]
         
         while not glfw.window_should_close(self.win):
             GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
@@ -225,26 +229,48 @@ class Viewer:
                 if self.veclocity != self.args['velocity']:
                     self.veclocity = self.args['velocity']
                 else:
-                    if current_optimizer != 'Random':
+                    if current_optimizer == 'Random':
+                        print('learning rate in Random: ',self.args["lr 0.0x"])
+                        print('optimizer in Random: ', [(i, optim) for i, optim in enumerate(tmp_optimizer)])
+                        self.points_line = [np.load(f'cache/points_line_{i}_{optim}_{self.args["lr 0.0x"]}.npy') for i, optim in enumerate(tmp_optimizer)]
+                        self.gradient = [np.load(f'cache/gradient_{i}_{optim}_{self.args["lr 0.0x"]}.npy') for i, optim in enumerate(tmp_optimizer)]
+                        lengths = sorted([len(points) for points in self.points_line], reverse=True)
+                        sixth_max = lengths[5] if len(lengths) >= 6 else None
+                        max_frames = int(sixth_max * 4 / 5) if sixth_max else None
+                        index = 0
+                        for drawable in self.drawables:
+                            if hasattr(drawable, 'update'):
+                                drawable.update(self.points_line[index], self.color[tmp_optimizer[index]])
+                                index += 1
+                    elif current_optimizer == 'Comparing':
+                        self.points_line = []
+                        self.gradient = []
+                        for optim in self.optims[1:-1]:
+                            for i in point_index:
+                                self.points_line.append(np.load(f'cache/points_line_{i}_{optim}_{self.args["lr 0.0x"]}.npy'))
+                                self.gradient.append(np.load(f'cache/gradient_{i}_{optim}_{self.args["lr 0.0x"]}.npy'))
+                                print('Comparing: ', i, optim)
+                        lengths = sorted([len(points) for points in self.points_line], reverse=True)
+                        sixth_max = lengths[5] if len(lengths) >= 6 else None
+                        max_frames = int(sixth_max * 4 / 5) if sixth_max else None
+                        index = 0
+                        for drawable in self.drawables:
+                            if hasattr(drawable, 'update'):
+                                print(index, self.optims[1:-1][int(index/5)])
+                                drawable.update(self.points_line[index], self.color[self.optims[1:-1][int(index/3)]])
+                                index += 1
+                    else:
                         self.points_line = [np.load(f'cache/points_line_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
                         self.gradient = [np.load(f'cache/gradient_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
-                        max_frames = int(max([len(points) for points in self.points_line])*4/5)
+                        lengths = sorted([len(points) for points in self.points_line], reverse=True)
+                        sixth_max = lengths[5] if len(lengths) >= 6 else None
+                        max_frames = int(sixth_max * 4 / 5) if sixth_max else None
                         index = 0
                         for drawable in self.drawables:
                             if hasattr(drawable, 'update'):
                                 drawable.update(self.points_line[index], self.color[current_optimizer])
                                 index += 1
                         tmp_optimizer = [random.choice(self.optims[:-2]) for _ in range(15)]
-                    else:
-                        print('learning rate in Random: ',self.args["lr 0.0x"])
-                        self.points_line = [np.load(f'cache/points_line_{i}_{optim}_{self.args["lr 0.0x"]}.npy') for i, optim in enumerate(tmp_optimizer)]
-                        self.gradient = [np.load(f'cache/gradient_{i}_{optim}_{self.args["lr 0.0x"]}.npy') for i, optim in enumerate(tmp_optimizer)]
-                        max_frames = int(max([len(points) for points in self.points_line])*4/5)
-                        index = 0
-                        for drawable in self.drawables:
-                            if hasattr(drawable, 'update'):
-                                drawable.update(self.points_line[index], self.color[tmp_optimizer[index]])
-                                index += 1
             
             # ---- Main 3D View ----
             GL.glViewport(int(win_size[0] * 0.5), 0, *main_viewport_size)
@@ -327,9 +353,11 @@ class Viewer:
             self.impl.render(imgui.get_draw_data())
             glfw.swap_buffers(self.win)
             glfw.poll_events()
-            frame_count += 1
-            if self.veclocity != 0:
-                sleep(0.1/(self.veclocity))
+            step = step + self.veclocity * 0.05
+            frame_count += round(step)
+            max_vec = 2 if self.veclocity > 4 else 1
+            step = 0 if step >= max_vec else step
+            sleep(0.004)
 
     def render_ui(self):
         # Get the number of parameters for the selected model
