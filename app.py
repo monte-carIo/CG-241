@@ -191,9 +191,7 @@ class Viewer:
     def run(self):
         """Main render loop for the OpenGL window with 2D contour overlay."""
         frame_count = 0
-        lengths = sorted([len(points) for points in self.points_line], reverse=True)
-        sixth_max = lengths[5] if len(lengths) >= 6 else None
-        max_frames = int(sixth_max * 4 / 5) if sixth_max else None
+        max_frames = int(max([len(points) for points in self.points_line]))
         self.dropdown_items = list(self.model_dict.keys())
         self.selected_item = 0  # Index for dropdown
         self.selected_optim = 1  # Index for optimizer dropdown
@@ -262,15 +260,13 @@ class Viewer:
                     else:
                         self.points_line = [np.load(f'cache/points_line_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
                         self.gradient = [np.load(f'cache/gradient_{i}_{current_optimizer}_{self.args["lr 0.0x"]}.npy') for i in range(15)]
-                        lengths = sorted([len(points) for points in self.points_line], reverse=True)
-                        sixth_max = lengths[5] if len(lengths) >= 6 else None
-                        max_frames = int(sixth_max * 4 / 5) if sixth_max else None
+                        max_frames = int(max([len(points) for points in self.points_line]))
                         index = 0
                         for drawable in self.drawables:
                             if hasattr(drawable, 'update'):
                                 drawable.update(self.points_line[index], self.color[current_optimizer])
                                 index += 1
-                        tmp_optimizer = [random.choice(self.optims[:-2]) for _ in range(15)]
+                        tmp_optimizer = [random.choice(self.optims[1:-1]) for _ in range(15)]
             
             # ---- Main 3D View ----
             GL.glViewport(int(win_size[0] * 0.5), 0, *main_viewport_size)
