@@ -4,6 +4,11 @@
 
 The **Viewer Application** is an OpenGL-based visualizer designed for rendering 3D objects and exploring gradient descent optimizers on data points. The tool incorporates ImGui for interactive settings, real-time rendering of optimizer trajectories, and support for multiple views (e.g., top-down, rotated, etc.). It is built to simulate, compare, and analyze various optimization algorithms.
 
+<video controls>
+  <source src="./assets/demo.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 ---
 
 ## Features
